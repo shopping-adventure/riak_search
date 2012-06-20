@@ -23,6 +23,7 @@
 %% API
 -export([register_stats/0,
          get_stats/0,
+         produce_stats/0,
          update/1,
         stats/0]).
 
@@ -33,11 +34,15 @@
 %% -------------------------------------------------------------------
 
 register_stats() ->
-    [register_stat(Stat, Type) || {Stat, Type} <- stats()].
+    [register_stat(Stat, Type) || {Stat, Type} <- stats()],
+    riak_core_stat_cache:register_app(?APP, {?MODULE, produce_stats, []}).
 
 %% @doc Return current aggregation of all stats.
 -spec get_stats() -> proplists:proplist().
 get_stats() ->
+    riak_core_stat_cache:get_stats(?APP).
+
+produce_stats() ->
     {?APP, [{Name, get_metric_value({?APP, Name}, Type)} || {Name, Type} <- stats()]}.
 
 %% @doc Update the given `Stat'.
