@@ -45,31 +45,35 @@ get_stats() ->
 produce_stats() ->
     {?APP, [{Name, get_metric_value({?APP, Name}, Type)} || {Name, Type} <- stats()]}.
 
+update(Arg) ->
+    spawn(fun() ->
+                  update1(Arg) end).
+
 %% @doc Update the given `Stat'.
--spec update(term()) -> ok.
-update(index_begin) ->
+-spec update1(term()) -> ok.
+update1(index_begin) ->
     folsom_metrics:notify_existing_metric({?APP, index_pending}, {inc, 1}, counter);
-update({index_end, Time}) ->
+update1({index_end, Time}) ->
     folsom_metrics:notify_existing_metric({?APP, index_latency}, Time, histogram),
     folsom_metrics:notify_existing_metric({?APP, index_throughput}, 1, meter),
     folsom_metrics:notify_existing_metric({?APP, index_pending}, {dec, 1}, counter);
-update({index_entries, N}) ->
+update1({index_entries, N}) ->
     folsom_metrics:notify_existing_metric({?APP, index_entries}, N, histogram);
-update(search_begin) ->
+update1(search_begin) ->
     folsom_metrics:notify_existing_metric({?APP, search_pending}, {inc, 1}, counter);
-update({search_end, Time}) ->
+update1({search_end, Time}) ->
     folsom_metrics:notify_existing_metric({?APP, search_latency}, Time, histogram),
     folsom_metrics:notify_existing_metric({?APP, search_throughput}, 1, meter),
     folsom_metrics:notify_existing_metric({?APP, search_pending}, {dec, 1}, counter);
-update(search_fold_begin) ->
+update1(search_fold_begin) ->
     folsom_metrics:notify_existing_metric({?APP, search_fold_pending}, {inc, 1}, counter);
-update({search_fold_end, Time}) ->
+update1({search_fold_end, Time}) ->
     folsom_metrics:notify_existing_metric({?APP, search_fold_latency}, Time, histogram),
     folsom_metrics:notify_existing_metric({?APP, search_fold_throughput}, 1, meter),
     folsom_metrics:notify_existing_metric({?APP, search_fold_pending}, {dec, 1}, counter);
-update(search_doc_begin) ->
+update1(search_doc_begin) ->
     folsom_metrics:notify_existing_metric({?APP, search_doc_pending}, {inc, 1}, counter);
-update({search_doc_end, Time}) ->
+update1({search_doc_end, Time}) ->
     folsom_metrics:notify_existing_metric({?APP, search_doc_latency}, Time, histogram),
     folsom_metrics:notify_existing_metric({?APP, search_doc_throughput}, 1, meter),
     folsom_metrics:notify_existing_metric({?APP, search_doc_pending}, {dec, 1}, counter).
