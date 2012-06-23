@@ -20,18 +20,28 @@
 %% @doc Collector for various Search stats.
 -module(riak_search_stat).
 
+-behaviour(gen_server).
+
 %% API
--export([register_stats/0,
+-export([start_link /0, register_stats/0,
          get_stats/0,
          produce_stats/0,
          update/1,
-        stats/0]).
+         stats/0]).
 
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-define(SERVER, ?MODULE).
 -define(APP, riak_search).
 
 %% -------------------------------------------------------------------
 %% API
 %% -------------------------------------------------------------------
+
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 register_stats() ->
     [register_stat(Stat, Type) || {Stat, Type} <- stats()],
@@ -40,14 +50,40 @@ register_stats() ->
 %% @doc Return current aggregation of all stats.
 -spec get_stats() -> proplists:proplist().
 get_stats() ->
-    riak_core_stat_cache:get_stats(?APP).
+    case riak_core_stat_cache:get_stats(?APP) of
+        {ok, Stats, _TS} ->
+            Stats;
+        Error -> Error
+    end.
 
 produce_stats() ->
     {?APP, [{Name, get_metric_value({?APP, Name}, Type)} || {Name, Type} <- stats()]}.
 
 update(Arg) ->
-    spawn(fun() ->
-                  update1(Arg) end).
+    gen_server:cast(?SERVER, {update, Arg}).
+
+%% gen_server
+
+init([]) ->
+    {ok, ok}.
+
+handle_call(_Req, _From, State) ->
+    {reply, ok, State}.
+
+handle_cast({update, Arg}, State) ->
+    update1(Arg),
+    {noreply, State};
+handle_cast(_Req, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %% @doc Update the given `Stat'.
 -spec update1(term()) -> ok.
