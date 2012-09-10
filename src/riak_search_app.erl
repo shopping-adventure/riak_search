@@ -34,10 +34,6 @@ start(_StartType, _StartArgs) ->
                             {stat_mod, riak_search_stat}
                         ]),
 
-                    %% Register our cluster_info app callback modules, with catch if
-                    %% the app is missing or packaging is broken.
-                    catch cluster_info:register_app(riak_search_cinfo),
-
                     Root = app_helper:get_env(riak_solr, solr_name, "solr"),
 
                     ok = riak_api_pb_service:register(?SERVICES),
