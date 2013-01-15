@@ -77,7 +77,7 @@ process(Msg, #state{client=Client}=State) ->
                     {error, riak_search_utils:err_msg({error, fl_id_with_sort, UK}), State};
                 true ->
                     %% Execute
-                    Result = run_query(Client, Schema, SQuery, QueryOps, FilterOps, Presort, FL),
+                    Result = run_query(Client, Schema, SQuery, QueryOps, FilterOps, Presort, FL, Sort),
                     {reply, encode_results(Result, UK, FL), State}
             end;
         {error, missing_query} ->
@@ -91,11 +91,12 @@ process_stream(_,_,State) ->
 %% ---------------------------------
 %% Internal functions
 %% ---------------------------------
-run_query(Client, Schema, SQuery, QueryOps, FilterOps, Presort, FL) ->
+run_query(Client, Schema, SQuery, QueryOps, FilterOps, Presort, FL, Sort) ->
     {_Time, NumFound, MaxScore, DocsOrIDs} =
         riak_search_utils:run_query(Client, Schema, SQuery, QueryOps,
                                     FilterOps, Presort, FL),
-    {NumFound, MaxScore, DocsOrIDs}.
+    SortedDocs = riak_solr_sort:sort(DocsOrIDs, binary_to_list(Sort), Schema),
+    {NumFound, MaxScore, SortedDocs}.
 
 encode_results({NumFound, MaxScore, {ids, IDs}}, UK, _FL) ->
     #rpbsearchqueryresp{
