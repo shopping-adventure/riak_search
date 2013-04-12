@@ -36,7 +36,7 @@
          process/2,
          process_stream/3]).
 
--import(riak_search_utils, [to_atom/1, to_binary/1, to_float/1]).
+-import(riak_search_utils, [to_atom/1, to_float/1]).
 -import(riak_pb_search_codec, [encode_search_doc/1]).
 
 -record(state, {client}).
@@ -95,7 +95,12 @@ run_query(Client, Schema, SQuery, QueryOps, FilterOps, Presort, FL, Sort) ->
     {_Time, NumFound, MaxScore, DocsOrIDs} =
         riak_search_utils:run_query(Client, Schema, SQuery, QueryOps,
                                     FilterOps, Presort, FL),
-    SortedDocs = riak_solr_sort:sort(DocsOrIDs, binary_to_list(Sort), Schema),
+    SortedDocs = case DocsOrIDs of
+        {docs, Docs} ->
+            {docs, riak_solr_sort:sort(Docs, binary_to_list(Sort), Schema)};
+        _ ->
+            DocsOrIDs
+    end,
     {NumFound, MaxScore, SortedDocs}.
 
 encode_results({NumFound, MaxScore, {ids, IDs}}, UK, _FL) ->
