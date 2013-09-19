@@ -38,10 +38,11 @@ analyze(Text, {erlang, Mod, Fun}, AnalyzerArgs) ->
     Mod:Fun(Text, AnalyzerArgs).
 
 %% Used in riak_kv Map/Reduce integration.
-mapred_search(Pipe, [DefaultIndex, Query], Timeout) ->
-    mapred_search(Pipe, [DefaultIndex, Query, ""], Timeout);
+mapred_search(Pipe, [Group, Query], Timeout) ->
+    mapred_search(Pipe, [Group, Query, ""], Timeout);
 
-mapred_search(Pipe, [DefaultIndex, Query, Filter], Timeout) ->
+mapred_search(Pipe, [Group, Query, Filter], Timeout) ->
+    DefaultIndex = index_for_group(Group),
     {ok, C} = riak_search:local_client(),
     QueryOps = parse_query(C, DefaultIndex, Query),
     FilterOps = parse_filter(C, DefaultIndex, Filter),
@@ -54,6 +55,15 @@ mapred_search(Pipe, [DefaultIndex, Query, Filter], Timeout) ->
     end,
     ok = C:search_fold(DefaultIndex, QueryOps, FilterOps, F, ok, Timeout),
     riak_pipe:eoi(Pipe).
+
+%% yokozuna disassociates bucket name from index name, but they're
+%% equivalent here.
+index_for_group({index, Index}) ->
+    Index;
+index_for_group({struct, [{<<"index">>, Index}]}) ->
+    Index;
+index_for_group(Bucket) ->
+    Bucket.
 
 parse_query(C, DefaultIndex, Query) ->
     case C:parse_query(DefaultIndex, Query) of
