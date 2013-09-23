@@ -58,8 +58,6 @@ mapred_search(Pipe, [Group, Query, Filter], Timeout) ->
 
 %% yokozuna disassociates bucket name from index name, but they're
 %% equivalent here.
-index_for_group({index, Index}) ->
-    Index;
 index_for_group({struct, [{<<"index">>, Index}]}) ->
     Index;
 index_for_group(Bucket) ->
