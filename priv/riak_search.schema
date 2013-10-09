@@ -1,0 +1,39 @@
+%% @doc To enable Search functionality set this 'on'.
+%% @datatype enum on, off
+{mapping, "search", "riak_search.enabled", [
+  {default, off},
+  {datatype, {enum, [on, off]}}
+]}.
+
+{ translation,
+  "riak_search.enabled", fun(Conf) -> 
+    Setting = cuttlefish_util:conf_get_value("search", Conf), 
+    case Setting of
+      on -> true;
+      off -> false;
+      _Default -> false
+    end
+end}.
+
+%% Merge Index Config
+%% @doc The root dir to store search merge_index data
+{mapping, "merge_index.data_root", "merge_index.data_root", [
+  {default, "{{platform_data_dir}}/merge_index"}
+]}.
+
+%% @doc Size, in bytes, of the in-memory buffer.  When this
+%% threshold has been reached the data is transformed
+%% into a segment file which resides on disk.
+{mapping, "merge_index.buffer_rollover_size", "merge_index.buffer_rollover_size", [
+  {default, "1MB"},
+  {datatype, bytesize}
+]}.
+
+%% @doc Overtime the segment files need to be compacted.
+%% This is the maximum number of segments that will be
+%% compacted at once.  A lower value will lead to
+%% quicker but more frequent compactions.
+{mapping, "merge_index.max_compact_segments", "merge_index.max_compact_segments", [
+  {default, 20},
+  {datatype, integer}
+]}.
