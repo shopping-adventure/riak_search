@@ -25,6 +25,7 @@
 %% API
 -export([start_link /0, register_stats/0,
          get_stats/0,
+         produce_stats/0,
          update/1,
          stats/0]).
 
@@ -43,12 +44,39 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 register_stats() ->
+    case riak_core_stat:stat_system() of
+        legacy   -> register_stats_legacy();
+        exometer -> register_stats_exometer()
+    end.
+
+register_stats_legacy() ->
+    [(catch folsom_metrics:delete_metric({?APP, Name})) || {Name, _Type} <- stats()],
+    [register_stat(Stat, Type) || {Stat, Type} <- stats()],
+    riak_core_stat_cache:register_app(?APP, {?MODULE, produce_stats, []}).
+
+register_stats_exometer() ->
     riak_core_stat:register_stats(?APP, stats()).
 
 %% @doc Return current aggregation of all stats.
 -spec get_stats() -> proplists:proplist().
 get_stats() ->
+    case riak_core_stat:stat_system() of
+        legacy   -> get_stats_legacy();
+        exometer -> get_stats_exometer()
+    end.
+
+get_stats_legacy() ->
+    case riak_core_stat_cache:get_stats(?APP) of
+        {ok, Stats, _TS} ->
+            Stats;
+        Error -> Error
+    end.
+
+get_stats_exometer() ->
     riak_core_stat:get_stats(?APP).
+
+produce_stats() ->
+    {?APP, [{Name, get_metric_value({?APP, Name}, Type)} || {Name, Type} <- stats()]}.
 
 update(Arg) ->
     gen_server:cast(?SERVER, {update, Arg}).
@@ -79,29 +107,61 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @doc Update the given `Stat'.
 -spec update1(term(), term()) -> ok.
-update1(P, index_begin) ->
+update1(P, Arg) ->
+    case riak_core_stat:stat_system() of
+        legacy   -> update1_legacy(Arg);
+        exometer -> update1_exometer(P, Arg)
+    end.
+update1_legacy(index_begin) ->
+    folsom_metrics:notify_existing_metric({?APP, index_pending}, {inc, 1}, counter);
+update1_legacy({index_end, Time}) ->
+    folsom_metrics:notify_existing_metric({?APP, index_latency}, Time, histogram),
+    folsom_metrics:notify_existing_metric({?APP, index_throughput}, 1, spiral),
+    folsom_metrics:notify_existing_metric({?APP, index_pending}, {dec, 1}, counter);
+update1_legacy({index_entries, N}) ->
+    folsom_metrics:notify_existing_metric({?APP, index_entries}, N, histogram);
+update1_legacy(search_begin) ->
+    folsom_metrics:notify_existing_metric({?APP, search_pending}, {inc, 1}, counter);
+update1_legacy({search_end, Time}) ->
+    folsom_metrics:notify_existing_metric({?APP, search_latency}, Time, histogram),
+    folsom_metrics:notify_existing_metric({?APP, search_throughput}, 1, spiral),
+    folsom_metrics:notify_existing_metric({?APP, search_pending}, {dec, 1}, counter);
+update1_legacy(search_fold_begin) ->
+    folsom_metrics:notify_existing_metric({?APP, search_fold_pending}, {inc, 1}, counter);
+update1_legacy({search_fold_end, Time}) ->
+    folsom_metrics:notify_existing_metric({?APP, search_fold_latency}, Time, histogram),
+    folsom_metrics:notify_existing_metric({?APP, search_fold_throughput}, 1, spiral),
+    folsom_metrics:notify_existing_metric({?APP, search_fold_pending}, {dec, 1}, counter);
+update1_legacy(search_doc_begin) ->
+    folsom_metrics:notify_existing_metric({?APP, search_doc_pending}, {inc, 1}, counter);
+update1_legacy({search_doc_end, Time}) ->
+    folsom_metrics:notify_existing_metric({?APP, search_doc_latency}, Time, histogram),
+    folsom_metrics:notify_existing_metric({?APP, search_doc_throughput}, 1, spiral),
+    folsom_metrics:notify_existing_metric({?APP, search_doc_pending}, {dec, 1}, counter).
+
+update1_exometer(P, index_begin) ->
     exometer:update([P, ?APP, index_pending], 1);
-update1(P, {index_end, Time}) ->
+update1_exometer(P, {index_end, Time}) ->
     exometer:update([P, ?APP, index_latency], Time),
     exometer:update([P, ?APP, index_throughput], 1),
     exometer:update([P, ?APP, index_pending], -1);
-update1(P, {index_entries, N}) ->
+update1_exometer(P, {index_entries, N}) ->
     exometer:update([P, ?APP, index_entries], N);
-update1(P, search_begin) ->
+update1_exometer(P, search_begin) ->
     exometer:update([P, ?APP, search_pending], 1);
-update1(P, {search_end, Time}) ->
+update1_exometer(P, {search_end, Time}) ->
     exometer:update([P, ?APP, search_latency], Time),
     exometer:update([P, ?APP, search_throughput], 1),
     exometer:update([P, ?APP, search_pending], -1);
-update1(P, search_fold_begin) ->
+update1_exometer(P, search_fold_begin) ->
     exometer:update([P, ?APP, search_fold_pending], 1);
-update1(P, {search_fold_end, Time}) ->
+update1_exometer(P, {search_fold_end, Time}) ->
     exometer:update([P, ?APP, search_fold_latency], Time),
     exometer:update([P, ?APP, search_fold_throughput], 1),
     exometer:update([P, ?APP, search_fold_pending], -1);
-update1(P, search_doc_begin) ->
+update1_exometer(P, search_doc_begin) ->
     exometer:update([P, ?APP, search_doc_pending], 1);
-update1(P, {search_doc_end, Time}) ->
+update1_exometer(P, {search_doc_end, Time}) ->
     exometer:update([P, ?APP, search_doc_latency], Time),
     exometer:update([P, ?APP, search_doc_throughput], 1),
     exometer:update([P, ?APP, search_doc_pending], -1).
@@ -110,6 +170,10 @@ update1(P, {search_doc_end, Time}) ->
 %% -------------------------------------------------------------------
 %% Private
 %% -------------------------------------------------------------------
+get_metric_value(Name, histogram) ->
+    folsom_metrics:get_histogram_statistics(Name);
+get_metric_value(Name, _Type) ->
+    folsom_metrics:get_metric_value(Name).
 
 stats() ->
     [
@@ -128,6 +192,15 @@ stats() ->
      {search_doc_throughput, spiral}
     ].
 
-%% get_sample_type(Name) ->
-%%     SampleType0 = app_helper:get_env(riak_search, stat_sample_type, {slide_uniform, {60, 1028}}),
-%%     app_helper:get_env(riak_search, Name, SampleType0).
+register_stat(Name, histogram) ->
+%% get the global default histo type
+    {SampleType, SampleArgs} = get_sample_type(Name),
+    folsom_metrics:new_histogram({?APP, Name}, SampleType, SampleArgs);
+register_stat(Name, spiral) ->
+    folsom_metrics:new_spiral({?APP, Name});
+register_stat(Name, counter) ->
+    folsom_metrics:new_counter({?APP, Name}).
+
+get_sample_type(Name) ->
+    SampleType0 = app_helper:get_env(riak_search, stat_sample_type, {slide_uniform, {60, 1028}}),
+    app_helper:get_env(riak_search, Name, SampleType0).
