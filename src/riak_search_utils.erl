@@ -252,9 +252,6 @@ ptransform_collect(Ref, Pids, Acc) when Pids /= [] ->
             NewPids = Pids -- [Pid],
             NewAcc = Results ++ Acc,
             ptransform_collect(Ref, NewPids, NewAcc)
-    after 60 -> 
-        [exit(Pid,normal)||Pid<-Pids],
-        Acc
     end;
 ptransform_collect(_, [], Acc) ->
     %% We've read from all the pids, so return.

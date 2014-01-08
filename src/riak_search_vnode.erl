@@ -91,8 +91,12 @@ command(PrefList, Req, Sender) ->
                                    riak_search_vnode_master).
 
 sync_command(IndexNode, Msg) ->
-    riak_core_vnode_master:sync_command(IndexNode, Msg,
-                                        riak_search_vnode_master, infinity).
+    %% used for indexation and deletion : can currently fail : use Timeout
+    try riak_core_vnode_master:sync_command(IndexNode, Msg,
+                                            riak_search_vnode_master, 500)
+    catch
+        exit:{timeout,_} -> {error, indexation_timeout}
+    end.
 
 %% @doc Repair the index at the given `Partition'.
 -spec repair(partition()) ->
