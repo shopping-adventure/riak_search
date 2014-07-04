@@ -258,4 +258,4 @@ object_info({I, {F, T}}) ->
 
 %% @private
 schema_nval_map() ->
-    [{S:name(), S:n_val()} || S <- riak_search_config:get_all_schemas()].
+    [].%[{S:name(), S:n_val()} || S <- riak_search_config:get_all_schemas()].
